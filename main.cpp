@@ -3,21 +3,22 @@
 // ░▀▀▀░▀▀▀░▀▀░░▀▀▀░▀▀░░▀░▀░▀▀▀░▀▀▀░░░▀▀▀░▀░▀░▀░░░▀▀▀░▀░▀░░▀░░▀▀▀░▀░▀
 
 // Định nghĩa các macro để sử dụng Unicode trong Windows API
-#define UNICODE
 #define _UNICODE
 
 // Bao gồm các thư viện cần thiết
-#include <windows.h>  // Thư viện Windows API cơ bản
-#include <shlobj.h>   // Thư viện cho các hộp thoại chọn thư mục
-#include <commctrl.h> // Thư viện cho các control phổ biến như status bar
-#include <iostream>   // Thư viện nhập/xuất chuẩn
-#include <fstream>    // Thư viện để đọc/ghi file
-#include <filesystem> // Thư viện làm việc với hệ thống file
-#include <string>     // Thư viện chuỗi
-#include <vector>     // Thư viện mảng động
-#include <sstream>    // Thư viện xử lý chuỗi
-#include <algorithm>  // Thư viện các thuật toán
-#include <set>        // Thư viện tập hợp
+#include <windows.h>         // Thư viện Windows API cơ bản
+#include "json.hpp"          // Thư viện để xử lý JSON
+using json = nlohmann::json; // Alias for convenience
+#include <shlobj.h>          // Thư viện cho các hộp thoại chọn thư mục
+#include <commctrl.h>        // Thư viện cho các control phổ biến như status bar
+#include <iostream>          // Thư viện nhập/xuất chuẩn
+#include <fstream>           // Thư viện để đọc/ghi file
+#include <filesystem>        // Thư viện làm việc với hệ thống file
+#include <string>            // Thư viện chuỗi
+#include <vector>            // Thư viện mảng động
+#include <sstream>           // Thư viện xử lý chuỗi
+#include <algorithm>         // Thư viện các thuật toán
+#include <set>               // Thư viện tập hợp
 
 // Chỉ thị cho trình biên dịch link với thư viện Common Controls
 #pragma comment(lib, "Comctl32.lib")
@@ -101,6 +102,123 @@ bool BrowseForFolder(HWND hwndOwner, std::string &folderPath)
         CoTaskMemFree(pidl);
     }
     return false;
+}
+
+// Hàm xử lý đặc biệt cho file Jupyter Notebook (.ipynb)
+void process_jupyter_notebook(const fs::path &filepath, std::ostream &out)
+{
+    std::ifstream file(filepath);
+    if (!file.is_open())
+    {
+        out << "\n// File: " << filepath.string() << " (could not be opened)\n";
+        return;
+    }
+
+    try
+    {
+        // Đọc nội dung JSON từ file
+        json notebook;
+        file >> notebook;
+        file.close();
+
+        // Ghi tên file vào file output
+        out << "\n// File: " << filepath.string() << " (Jupyter Notebook)\n";
+
+        // Kiểm tra nếu có metadata
+        if (notebook.contains("metadata"))
+        {
+            out << "// Notebook Metadata:\n";
+            if (notebook["metadata"].contains("kernelspec") &&
+                notebook["metadata"]["kernelspec"].contains("display_name"))
+            {
+                out << "// Kernel: " << notebook["metadata"]["kernelspec"]["display_name"].get<std::string>() << "\n";
+            }
+        }
+
+        // Xử lý từng cell trong notebook
+        if (notebook.contains("cells") && notebook["cells"].is_array())
+        {
+            out << "\n// Notebook Content:\n";
+            int cell_number = 1;
+
+            for (const auto &cell : notebook["cells"])
+            {
+                // Lấy loại cell (code, markdown, etc.)
+                std::string cell_type = cell.contains("cell_type") ? cell["cell_type"].get<std::string>() : "unknown";
+
+                out << "\n// --- Cell " << cell_number << " (" << cell_type << ") ---\n";
+
+                // Xử lý nội dung cell
+                if (cell.contains("source") && cell["source"].is_array())
+                {
+                    // Nối tất cả các dòng trong source
+                    for (const auto &line : cell["source"])
+                    {
+                        if (line.is_string())
+                        {
+                            out << line.get<std::string>();
+                        }
+                    }
+                    out << "\n";
+                }
+
+                // Nếu là cell code và có output
+                if (cell_type == "code" && cell.contains("outputs") && cell["outputs"].is_array())
+                {
+                    out << "// --- Output ---\n";
+                    for (const auto &output : cell["outputs"])
+                    {
+                        // Xử lý các loại output khác nhau
+                        if (output.contains("output_type"))
+                        {
+                            std::string output_type = output["output_type"].get<std::string>();
+
+                            if (output_type == "execute_result" || output_type == "display_data")
+                            {
+                                if (output.contains("data") &&
+                                    output["data"].contains("text/plain") &&
+                                    output["data"]["text/plain"].is_array())
+                                {
+                                    out << "// Result (text/plain):\n";
+                                    for (const auto &line : output["data"]["text/plain"])
+                                    {
+                                        if (line.is_string())
+                                        {
+                                            out << "// " << line.get<std::string>() << "\n";
+                                        }
+                                    }
+                                }
+                            }
+                            else if (output_type == "stream" &&
+                                     output.contains("text") &&
+                                     output["text"].is_array())
+                            {
+                                std::string stream_name = output.contains("name") ? output["name"].get<std::string>() : "stdout";
+                                out << "// Stream (" << stream_name << "):\n";
+                                for (const auto &line : output["text"])
+                                {
+                                    if (line.is_string())
+                                    {
+                                        out << "// " << line.get<std::string>() << "\n";
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                cell_number++;
+            }
+        }
+    }
+    catch (const json::exception &e)
+    {
+        out << "// Error parsing notebook: " << e.what() << "\n";
+    }
+    catch (const std::exception &e)
+    {
+        out << "// Error processing notebook: " << e.what() << "\n";
+    }
 }
 
 // Hàm hiển thị hộp thoại chọn thư mục xuất file
@@ -229,7 +347,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                      10, 120, 400, 20, hwnd, NULL, NULL, NULL);
 
         // Ô nhập danh sách phần mở rộng file
-        g_hwndExtensions = CreateWindow(L"EDIT", L"cpp,h,txt", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_AUTOHSCROLL,
+        g_hwndExtensions = CreateWindow(L"EDIT", L"go,cpp,h,txt,ipynb,py", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_AUTOHSCROLL,
                                         10, 140, 540, 25, hwnd, NULL, NULL, NULL);
 
         // Nút "Process Directory" để bắt đầu xử lý
@@ -409,6 +527,13 @@ void build_tree_structure(const fs::path &path, std::ostream &out, std::string p
 // Hàm ghi nội dung file vào file output
 void dump_file(const fs::path &filepath, std::ostream &out)
 {
+    // Kiểm tra xem có phải file ipynb không
+    if (filepath.extension() == ".ipynb")
+    {
+        process_jupyter_notebook(filepath, out);
+        return;
+    }
+
     // Mở file để đọc
     std::ifstream file(filepath);
     if (!file.is_open())
@@ -456,7 +581,7 @@ void process_directory(const fs::path &dir_path, const std::string &output_file,
     }
 
     // Ghi các tiêu đề và thông tin tổng quan
-    out << "--- Project Overview ---\n(leave this section blank)\n\n";
+    out << "--- Project Overview ---\n\n\n";
     out << "--- Notes ---\nThis is the complete project code. Please read and understand thoroughly.\n\n";
 
     // Ghi danh sách các phần mở rộng file được bao gồm
