@@ -500,21 +500,31 @@ void build_tree_structure(const fs::path &path, std::ostream &out, std::string p
             entries.push_back(entry);
         }
 
-        // Duyệt qua từng mục và tạo cấu trúc cây
-        for (size_t i = 0; i < entries.size(); ++i)
+        // Kiểm tra nếu có quá nhiều files (hơn 50)
+        bool tooManyFiles = entries.size() > 50;
+        size_t displayCount = tooManyFiles ? 5 : entries.size();
+
+        // Duyệt qua từng mục và tạo cấu trúc cây (chỉ hiển thị 5 file đầu nếu có quá nhiều)
+        for (size_t i = 0; i < displayCount; ++i)
         {
             const auto &entry = entries[i];
-            // Ký tự kết nối cho cây thư mục (└── cho mục cuối cùng, ├── cho các mục khác)
-            std::string connector = (i == entries.size() - 1) ? "└── " : "├── ";
+            // Ký tự kết nối cho cây thư mục
+            std::string connector = (i == displayCount - 1 && !tooManyFiles) ? "└── " : "├── ";
             out << prefix << connector << entry.path().filename().string() << "\n";
 
             // Nếu mục là thư mục, đệ quy để hiển thị nội dung bên trong
             if (entry.is_directory())
             {
-                // Tiền tố mới cho các mục con (thêm dấu │ hoặc khoảng trắng)
-                std::string new_prefix = prefix + ((i == entries.size() - 1) ? "    " : "│   ");
+                // Tiền tố mới cho các mục con
+                std::string new_prefix = prefix + ((i == displayCount - 1 && !tooManyFiles) ? "    " : "│   ");
                 build_tree_structure(entry.path(), out, new_prefix);
             }
+        }
+
+        // Nếu có quá nhiều files, hiển thị thông báo "..."
+        if (tooManyFiles)
+        {
+            out << prefix << "└── ... (and " << (entries.size() - 5) << " more items)\n";
         }
     }
     catch (const std::filesystem::filesystem_error &e)
@@ -524,9 +534,34 @@ void build_tree_structure(const fs::path &path, std::ostream &out, std::string p
     }
 }
 
+// Hàm đếm số dòng trong file
+size_t count_file_lines(const fs::path &filepath)
+{
+    std::ifstream file(filepath);
+    if (!file.is_open())
+        return 0;
+
+    size_t line_count = 0;
+    std::string line;
+    while (std::getline(file, line))
+    {
+        line_count++;
+    }
+    file.close();
+    return line_count;
+}
+
 // Hàm ghi nội dung file vào file output
 void dump_file(const fs::path &filepath, std::ostream &out)
 {
+    // Kiểm tra số dòng của file trước khi xử lý
+    size_t line_count = count_file_lines(filepath);
+    if (line_count > 10000)
+    {
+        out << "\n// File: " << filepath.string() << " (skipped - too large: " << line_count << " lines)\n";
+        return;
+    }
+
     // Kiểm tra xem có phải file ipynb không
     if (filepath.extension() == ".ipynb")
     {
@@ -544,7 +579,7 @@ void dump_file(const fs::path &filepath, std::ostream &out)
     }
 
     // Ghi tên file vào file output
-    out << "\n// File: " << filepath.string() << "\n";
+    out << "\n// File: " << filepath.string() << " (" << line_count << " lines)\n";
     // Đọc và ghi từng dòng của file
     std::string line;
     while (std::getline(file, line))
