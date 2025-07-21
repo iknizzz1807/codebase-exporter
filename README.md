@@ -33,7 +33,7 @@ Công cụ này giúp bạn:
 ## Gợi ý sử dụng với AI
 
 1. Chạy Codebase Exporter và tạo file output.txt
-2. Mở file output.txt và chỉnh sửa phần "project overview" hoặc thêm context theo ý bạn, sau đó sao chép file.
+2. Mở file src.txt và chỉnh sửa phần "project overview" hoặc thêm context theo ý bạn, sau đó sao chép file.
 3. Dán nội dung vào prompt cho AI với yêu cầu phân tích cụ thể
 4. Do file bao gồm cấu trúc thư mục và mã nguồn, AI có thể hiểu được bối cảnh và mối quan hệ giữa các file
 

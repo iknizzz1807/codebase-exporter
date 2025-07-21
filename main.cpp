@@ -66,6 +66,8 @@ void dump_file(const fs::path &filepath, std::ostream &out);
 bool should_read_file(const fs::path &filepath, const std::set<std::string> &extensions);
 void process_directory(const fs::path &dir_path, const std::string &output_file, const std::set<std::string> &extensions);
 std::vector<std::string> split(const std::string &s, char delimiter);
+bool should_skip_directory(const std::string &dirname);
+bool is_important_docker_file(const fs::path &filepath);
 
 // Biến toàn cục để lưu trữ handle của các control UI
 HWND g_hwndMain = NULL;       // Handle của cửa sổ chính
@@ -283,7 +285,7 @@ DWORD WINAPI ProcessDirectoryThread(LPVOID lpParam)
     try
     {
         // Tạo đường dẫn đầy đủ cho file output.txt trong thư mục đã chọn
-        fs::path outputPath = fs::path(g_outputFile) / "output.txt";
+        fs::path outputPath = fs::path(g_outputFile) / "src.txt";
         std::string fullOutputPath = outputPath.string();
 
         // Xử lý thư mục và tạo file output
@@ -497,6 +499,15 @@ void build_tree_structure(const fs::path &path, std::ostream &out, std::string p
         std::vector<fs::directory_entry> entries;
         for (const auto &entry : fs::directory_iterator(path))
         {
+            // Bỏ qua các thư mục không mong muốn
+            if (entry.is_directory())
+            {
+                std::string dirname = entry.path().filename().string();
+                if (should_skip_directory(dirname))
+                {
+                    continue;
+                }
+            }
             entries.push_back(entry);
         }
 
@@ -592,6 +603,10 @@ void dump_file(const fs::path &filepath, std::ostream &out)
 // Hàm kiểm tra xem có nên đọc file dựa trên phần mở rộng không
 bool should_read_file(const fs::path &filepath, const std::set<std::string> &extensions)
 {
+    // Luôn đọc các file Docker quan trọng
+    if (is_important_docker_file(filepath))
+        return true;
+
     // Nếu không có phần mở rộng nào được chỉ định, đọc tất cả các file
     if (extensions.empty())
         return true;
@@ -603,6 +618,62 @@ bool should_read_file(const fs::path &filepath, const std::set<std::string> &ext
 
     // Kiểm tra xem phần mở rộng có trong danh sách không
     return extensions.find(ext) != extensions.end();
+}
+
+bool should_skip_directory(const std::string &dirname)
+{
+    // Danh sách các thư mục thường bị bỏ qua
+    static const std::set<std::string> skip_dirs = {
+        ".git",
+        ".svn",
+        ".hg",
+        ".bzr",
+        "node_modules",
+        "__pycache__",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".tox",
+        ".coverage",
+        ".nyc_output",
+        "coverage",
+        ".idea",
+        ".vscode",
+        ".vs",
+        "bin",
+        "obj",
+        "build",
+        "dist",
+        ".gradle",
+        "target",
+        ".next",
+        ".nuxt",
+        "out",
+        ".cache",
+        ".tmp",
+        "tmp",
+        "temp",
+        ".DS_Store",
+        "Thumbs.db"};
+
+    return skip_dirs.find(dirname) != skip_dirs.end();
+}
+
+bool is_important_docker_file(const fs::path &filepath)
+{
+    std::string filename = filepath.filename().string();
+    std::transform(filename.begin(), filename.end(), filename.begin(), ::tolower);
+
+    // Danh sách các file Docker quan trọng
+    return filename == "dockerfile" ||
+           filename == "dockerfile.dev" ||
+           filename == "dockerfile.prod" ||
+           filename == "dockerfile.test" ||
+           filename == "docker-compose.yml" ||
+           filename == "docker-compose.yaml" ||
+           filename == "docker-compose.dev.yml" ||
+           filename == "docker-compose.prod.yml" ||
+           filename == "docker-compose.test.yml" ||
+           filename == "docker-compose.override.yml";
 }
 
 // Hàm chính để xử lý thư mục và tạo file output
@@ -628,7 +699,11 @@ void process_directory(const fs::path &dir_path, const std::string &output_file,
         for (const auto &ext : extensions)
             out << "." << ext << "\n";
     }
-    out << "\n";
+    out << "\n--- Important Files Always Included ---\n";
+    out << "Dockerfile, docker-compose.yml/.yaml files (regardless of extension filter)\n\n";
+
+    out << "--- Excluded Directories ---\n";
+    out << ".git, .svn, node_modules, __pycache__, .idea, .vscode, bin, obj, build, dist, etc.\n\n";
 
     // Ghi cấu trúc thư mục
     out << "--- Directory Structure ---\n";
@@ -640,15 +715,36 @@ void process_directory(const fs::path &dir_path, const std::string &output_file,
     {
         // Duyệt qua tất cả các file trong thư mục và các thư mục con
         auto options = fs::directory_options::skip_permission_denied;
-        for (auto &p : fs::recursive_directory_iterator(dir_path, options))
+
+        std::function<void(const fs::path &)> process_directory_recursive = [&](const fs::path &current_path)
         {
-            // Nếu là file thông thường và phần mở rộng phù hợp
-            if (p.is_regular_file() && should_read_file(p.path(), extensions))
+            try
             {
-                // Ghi nội dung file vào file output
-                dump_file(p.path(), out);
+                for (auto &entry : fs::directory_iterator(current_path, options))
+                {
+                    if (entry.is_directory())
+                    {
+                        // Bỏ qua các thư mục không mong muốn
+                        std::string dirname = entry.path().filename().string();
+                        if (!should_skip_directory(dirname))
+                        {
+                            process_directory_recursive(entry.path());
+                        }
+                    }
+                    else if (entry.is_regular_file() && should_read_file(entry.path(), extensions))
+                    {
+                        // Ghi nội dung file vào file output
+                        dump_file(entry.path(), out);
+                    }
+                }
             }
-        }
+            catch (const std::filesystem::filesystem_error &e)
+            {
+                out << "Error accessing directory " << current_path.string() << ": " << e.what() << "\n";
+            }
+        };
+
+        process_directory_recursive(dir_path);
     }
     catch (const std::filesystem::filesystem_error &e)
     {
