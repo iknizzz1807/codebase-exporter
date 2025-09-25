@@ -2,6 +2,8 @@ package main
 
 import (
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/lxn/walk"
@@ -27,16 +29,55 @@ func main() {
 		Size:     declarative.Size{Width: 570, Height: 280},
 		Layout:   declarative.VBox{},
 		Children: []declarative.Widget{
-			// GroupBox cho thư mục dự án
 			declarative.GroupBox{
 				Title:  "Project Directory",
-				Layout: declarative.HBox{},
+				Layout: declarative.VBox{},
 				Children: []declarative.Widget{
-					declarative.LineEdit{AssignTo: &mw.sourceDirEdit, ReadOnly: true},
-					declarative.PushButton{
-						Text: "Browse...",
-						OnClicked: func() {
-							mw.browseForFolder(mw.sourceDirEdit, "Select Project Directory")
+					declarative.Composite{
+						Layout: declarative.HBox{},
+						Children: []declarative.Widget{
+							declarative.LineEdit{AssignTo: &mw.sourceDirEdit, ReadOnly: true},
+							declarative.PushButton{
+								Text: "Browse...",
+								OnClicked: func() {
+									mw.browseForFolder(mw.sourceDirEdit, "Select Project Directory")
+								},
+							},
+						},
+					},
+					declarative.Composite{
+						Layout: declarative.HBox{},
+						Children: []declarative.Widget{
+							declarative.PushButton{
+								Text: "Desktop",
+								OnClicked: func() {
+									userProfile := os.Getenv("USERPROFILE")
+									if userProfile != "" {
+										desktopPath := filepath.Join(userProfile, "Desktop")
+										mw.sourceDirEdit.SetText(desktopPath)
+									}
+								},
+							},
+							declarative.PushButton{
+								Text: "Downloads",
+								OnClicked: func() {
+									userProfile := os.Getenv("USERPROFILE")
+									if userProfile != "" {
+										downloadsPath := filepath.Join(userProfile, "Downloads")
+										mw.sourceDirEdit.SetText(downloadsPath)
+									}
+								},
+							},
+							declarative.PushButton{
+								Text: "Documents",
+								OnClicked: func() {
+									userProfile := os.Getenv("USERPROFILE")
+									if userProfile != "" {
+										documentsPath := filepath.Join(userProfile, "Documents")
+										mw.sourceDirEdit.SetText(documentsPath)
+									}
+								},
+							},
 						},
 					},
 				},
@@ -44,13 +85,53 @@ func main() {
 			// GroupBox cho thư mục output
 			declarative.GroupBox{
 				Title:  "Output Directory",
-				Layout: declarative.HBox{},
+				Layout: declarative.VBox{},
 				Children: []declarative.Widget{
-					declarative.LineEdit{AssignTo: &mw.outputDirEdit, ReadOnly: true},
-					declarative.PushButton{
-						Text: "Browse...",
-						OnClicked: func() {
-							mw.browseForFolder(mw.outputDirEdit, "Select Output Directory")
+					declarative.Composite{
+						Layout: declarative.HBox{},
+						Children: []declarative.Widget{
+							declarative.LineEdit{AssignTo: &mw.outputDirEdit, ReadOnly: true},
+							declarative.PushButton{
+								Text: "Browse...",
+								OnClicked: func() {
+									mw.browseForFolder(mw.outputDirEdit, "Select Output Directory")
+								},
+							},
+						},
+					},
+					declarative.Composite{
+						Layout: declarative.HBox{},
+						Children: []declarative.Widget{
+							declarative.PushButton{
+								Text: "Desktop",
+								OnClicked: func() {
+									userProfile := os.Getenv("USERPROFILE")
+									if userProfile != "" {
+										desktopPath := filepath.Join(userProfile, "Desktop")
+										mw.outputDirEdit.SetText(desktopPath)
+									}
+								},
+							},
+							declarative.PushButton{
+								Text: "Downloads",
+								OnClicked: func() {
+									userProfile := os.Getenv("USERPROFILE")
+									if userProfile != "" {
+										downloadsPath := filepath.Join(userProfile, "Downloads")
+										mw.outputDirEdit.SetText(downloadsPath)
+									}
+								},
+							},
+							declarative.PushButton{
+								Text: "Documents",
+								OnClicked: func() {
+									userProfile := os.Getenv("USERPROFILE")
+									if userProfile != "" {
+										documentsPath := filepath.Join(userProfile, "Documents")
+										mw.outputDirEdit.SetText(documentsPath)
+									}
+								},
+							},
 						},
 					},
 				},
