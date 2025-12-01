@@ -1,260 +1,185 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/lxn/walk"
-	"github.com/lxn/walk/declarative"
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/widget"
 )
 
-// MainWindow là cấu trúc của cửa sổ chính
-type MainWindow struct {
-	*walk.MainWindow
-	sourceDirEdit  *walk.LineEdit
-	outputDirEdit  *walk.LineEdit
-	extensionsEdit *walk.LineEdit
-	processButton  *walk.PushButton
-	statusBar      *walk.StatusBarItem
-}
-
 func main() {
-	mw := new(MainWindow)
+	// Khởi tạo ứng dụng Fyne
+	fmt.Println("Đang khởi tạo ứng dụng...")
+	myApp := app.New()
+	myWindow := myApp.NewWindow("Codebase Exporter")
+	myWindow.Resize(fyne.NewSize(600, 400))
 
-	err := declarative.MainWindow{
-		AssignTo: &mw.MainWindow,
-		Title:    "Codebase Exporter",
-		Size:     declarative.Size{Width: 570, Height: 280},
-		Layout:   declarative.VBox{},
-		Children: []declarative.Widget{
-			declarative.GroupBox{
-				Title:  "Project Directory",
-				Layout: declarative.VBox{},
-				Children: []declarative.Widget{
-					declarative.Composite{
-						Layout: declarative.HBox{},
-						Children: []declarative.Widget{
-							declarative.LineEdit{AssignTo: &mw.sourceDirEdit, ReadOnly: true},
-							declarative.PushButton{
-								Text: "Browse...",
-								OnClicked: func() {
-									mw.browseForFolder(mw.sourceDirEdit, "Select Project Directory")
-								},
-							},
-						},
-					},
-					declarative.Composite{
-						Layout: declarative.HBox{},
-						Children: []declarative.Widget{
-							declarative.PushButton{
-								Text: "Desktop",
-								OnClicked: func() {
-									userProfile := os.Getenv("USERPROFILE")
-									if userProfile != "" {
-										desktopPath := filepath.Join(userProfile, "Desktop")
-										mw.sourceDirEdit.SetText(desktopPath)
-									}
-								},
-							},
-							declarative.PushButton{
-								Text: "Downloads",
-								OnClicked: func() {
-									userProfile := os.Getenv("USERPROFILE")
-									if userProfile != "" {
-										downloadsPath := filepath.Join(userProfile, "Downloads")
-										mw.sourceDirEdit.SetText(downloadsPath)
-									}
-								},
-							},
-							declarative.PushButton{
-								Text: "Documents",
-								OnClicked: func() {
-									userProfile := os.Getenv("USERPROFILE")
-									if userProfile != "" {
-										documentsPath := filepath.Join(userProfile, "Documents")
-										mw.sourceDirEdit.SetText(documentsPath)
-									}
-								},
-							},
-						},
-					},
-				},
-			},
-			// GroupBox cho thư mục output
-			declarative.GroupBox{
-				Title:  "Output Directory",
-				Layout: declarative.VBox{},
-				Children: []declarative.Widget{
-					declarative.Composite{
-						Layout: declarative.HBox{},
-						Children: []declarative.Widget{
-							declarative.LineEdit{AssignTo: &mw.outputDirEdit, ReadOnly: true},
-							declarative.PushButton{
-								Text: "Browse...",
-								OnClicked: func() {
-									mw.browseForFolder(mw.outputDirEdit, "Select Output Directory")
-								},
-							},
-						},
-					},
-					declarative.Composite{
-						Layout: declarative.HBox{},
-						Children: []declarative.Widget{
-							declarative.PushButton{
-								Text: "Desktop",
-								OnClicked: func() {
-									userProfile := os.Getenv("USERPROFILE")
-									if userProfile != "" {
-										desktopPath := filepath.Join(userProfile, "Desktop")
-										mw.outputDirEdit.SetText(desktopPath)
-									}
-								},
-							},
-							declarative.PushButton{
-								Text: "Downloads",
-								OnClicked: func() {
-									userProfile := os.Getenv("USERPROFILE")
-									if userProfile != "" {
-										downloadsPath := filepath.Join(userProfile, "Downloads")
-										mw.outputDirEdit.SetText(downloadsPath)
-									}
-								},
-							},
-							declarative.PushButton{
-								Text: "Documents",
-								OnClicked: func() {
-									userProfile := os.Getenv("USERPROFILE")
-									if userProfile != "" {
-										documentsPath := filepath.Join(userProfile, "Documents")
-										mw.outputDirEdit.SetText(documentsPath)
-									}
-								},
-							},
-						},
-					},
-				},
-			},
-			// GroupBox cho các phần mở rộng
-			declarative.GroupBox{
-				Title:  "File Extensions (comma separated, leave empty for all)",
-				Layout: declarative.HBox{},
-				Children: []declarative.Widget{
-					declarative.LineEdit{
-						AssignTo: &mw.extensionsEdit,
-						Text:     "go,cpp,h,txt,ipynb,py", // Giá trị mặc định
-					},
-				},
-			},
-			// Không gian đệm và nút Process
-			declarative.VSpacer{},
-			declarative.Composite{
-				Layout: declarative.HBox{},
-				Children: []declarative.Widget{
-					declarative.HSpacer{},
-					declarative.PushButton{
-						AssignTo:  &mw.processButton,
-						Text:      "Process Directory",
-						OnClicked: mw.processDirectory,
-					},
-					declarative.HSpacer{},
-				},
-			},
-		},
-		// Thanh trạng thái
-		StatusBarItems: []declarative.StatusBarItem{
-			{
-				AssignTo: &mw.statusBar,
-				Text:     "Ready. Select a directory and output path.",
-			},
-		},
-	}.Create()
+	// --- UI Components ---
 
-	if err != nil {
-		log.Fatal(err)
+	// 1. Source Directory
+	sourceLabel := widget.NewLabel("Project Directory:")
+	sourceEntry := widget.NewEntry()
+	sourceEntry.PlaceHolder = "Select project path..."
+
+	// 2r Output Directory
+	outputLabel := widget.NewLabel("Output Directory:")
+	outputEntry := widget.NewEntry()
+	outputEntry.PlaceHolder = "Select output path..."
+
+	// 3. Extensions
+	extLabel := widget.NewLabel("File Extensions (comma separated, empty for all):")
+	extEntry := widget.NewEntry()
+	extEntry.SetText("go,cpp,h,txt,ipynb,py,js,ts,html,css,java") // Default
+
+	// Status Label
+	statusLabel := widget.NewLabel("Ready.")
+	statusLabel.Wrapping = fyne.TextWrapWord
+
+	// --- Helper Functions for Buttons ---
+
+	// Hàm chọn thư mục
+	browseFunc := func(target *widget.Entry, title string) {
+		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
+			if err != nil || uri == nil {
+				return
+			}
+			target.SetText(uri.Path())
+		}, myWindow)
 	}
 
-	mw.Run()
-}
-
-// browseForFolder mở hộp thoại chọn thư mục và gán đường dẫn vào LineEdit
-func (mw *MainWindow) browseForFolder(target *walk.LineEdit, title string) {
-	dlg := new(walk.FileDialog)
-	dlg.Title = title
-	dlg.Filter = "Folders|"
-
-	if ok, err := dlg.ShowBrowseFolder(mw); err != nil {
-		mw.updateStatus("Lỗi mở hộp thoại: " + err.Error())
-		return
-	} else if !ok {
-		return // Người dùng hủy
-	}
-	target.SetText(dlg.FilePath)
-}
-
-// updateStatus cập nhật text trên thanh trạng thái một cách an toàn
-func (mw *MainWindow) updateStatus(text string) {
-	// Sử dụng Synchronize để cập nhật UI từ một goroutine khác một cách an toàn
-	mw.Synchronize(func() {
-		mw.statusBar.SetText(text)
-	})
-}
-
-// processDirectory là hàm xử lý khi nút "Process" được nhấn
-func (mw *MainWindow) processDirectory() {
-	sourceDir := mw.sourceDirEdit.Text()
-	outputDir := mw.outputDirEdit.Text()
-	extStr := mw.extensionsEdit.Text()
-
-	if sourceDir == "" {
-		walk.MsgBox(mw, "Error", "Please select a project directory.", walk.MsgBoxIconError)
-		return
-	}
-	if outputDir == "" {
-		walk.MsgBox(mw, "Error", "Please select an output directory.", walk.MsgBoxIconError)
-		return
+	// Hàm set đường dẫn nhanh (Desktop/Downloads/Documents)
+	setPathFunc := func(target *widget.Entry, folderName string) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return
+		}
+		target.SetText(filepath.Join(home, folderName))
 	}
 
-	// Vô hiệu hóa nút để tránh nhấn nhiều lần
-	mw.processButton.SetEnabled(false)
-	defer mw.processButton.SetEnabled(true)
+	// --- Layout Construction ---
 
-	// Chuẩn bị config
-	extensions := make(map[string]struct{})
-	allFiles := false
-	trimmedExtStr := strings.TrimSpace(extStr)
-	if trimmedExtStr == "" {
-		allFiles = true
-	} else {
-		parts := strings.Split(trimmedExtStr, ",")
-		for _, part := range parts {
-			ext := strings.TrimSpace(part)
-			ext = strings.TrimPrefix(ext, ".")
-			if ext != "" {
-				extensions[ext] = struct{}{}
+	// Source Group
+	sourceBrowseBtn := widget.NewButton("Browse...", func() { browseFunc(sourceEntry, "Select Project Directory") })
+	sourceQuickBtns := container.NewHBox(
+		widget.NewButton("Desktop", func() { setPathFunc(sourceEntry, "Desktop") }),
+		widget.NewButton("Downloads", func() { setPathFunc(sourceEntry, "Downloads") }),
+		widget.NewButton("Documents", func() { setPathFunc(sourceEntry, "Documents") }),
+	)
+
+	sourceGroup := container.NewVBox(
+		sourceLabel,
+		container.NewBorder(nil, nil, nil, sourceBrowseBtn, sourceEntry),
+		sourceQuickBtns,
+	)
+
+	// Output Group
+	outputBrowseBtn := widget.NewButton("Browse...", func() { browseFunc(outputEntry, "Select Output Directory") })
+	outputQuickBtns := container.NewHBox(
+		widget.NewButton("Desktop", func() { setPathFunc(outputEntry, "Desktop") }),
+		widget.NewButton("Downloads", func() { setPathFunc(outputEntry, "Downloads") }),
+		widget.NewButton("Documents", func() { setPathFunc(outputEntry, "Documents") }),
+	)
+
+	outputGroup := container.NewVBox(
+		outputLabel,
+		container.NewBorder(nil, nil, nil, outputBrowseBtn, outputEntry),
+		outputQuickBtns,
+	)
+
+	// Extension Group
+	extGroup := container.NewVBox(
+		extLabel,
+		extEntry,
+	)
+
+	// Process Button logic
+	processBtn := widget.NewButton("Process Directory", nil) // Set action below to capture vars
+	processBtn.Importance = widget.HighImportance
+
+	processBtn.OnTapped = func() {
+		sourceDir := sourceEntry.Text
+		outputDir := outputEntry.Text
+		extStr := extEntry.Text
+
+		if sourceDir == "" {
+			dialog.ShowError(fmt.Errorf("please select a project directory"), myWindow)
+			return
+		}
+		if outputDir == "" {
+			dialog.ShowError(fmt.Errorf("please select an output directory"), myWindow)
+			return
+		}
+
+		processBtn.Disable()
+		statusLabel.SetText("Processing... Please wait.")
+
+		// Parse extensions
+		extensions := make(map[string]struct{})
+		allFiles := false
+		trimmedExtStr := strings.TrimSpace(extStr)
+		if trimmedExtStr == "" {
+			allFiles = true
+		} else {
+			parts := strings.Split(trimmedExtStr, ",")
+			for _, part := range parts {
+				ext := strings.TrimSpace(part)
+				ext = strings.TrimPrefix(ext, ".") // remove dot if user typed it
+				if ext != "" {
+					extensions[ext] = struct{}{}
+				}
 			}
 		}
-	}
 
-	config := Config{
-		SourceDir:    sourceDir,
-		OutputDir:    outputDir,
-		Extensions:   extensions,
-		AllFiles:     allFiles,
-		UpdateStatus: mw.updateStatus, // Truyền hàm callback
-	}
-
-	// Chạy tác vụ nặng trong một goroutine riêng để không làm treo UI
-	go func() {
-		mw.updateStatus("Processing... Please wait.")
-		err := ProcessProject(config)
-		if err != nil {
-			// Hiển thị lỗi trên cả status bar và message box
-			errMsg := "Error: " + err.Error()
-			mw.updateStatus(errMsg)
-			walk.MsgBox(mw, "Processing Error", errMsg, walk.MsgBoxIconError)
+		config := Config{
+			SourceDir:  sourceDir,
+			OutputDir:  outputDir,
+			Extensions: extensions,
+			AllFiles:   allFiles,
+			UpdateStatus: func(msg string) {
+				// Fyne UI update must be thread-safe, usually handled auto but good practice
+				statusLabel.SetText(msg)
+			},
 		}
-		// Hàm ProcessProject sẽ tự cập nhật trạng thái thành công
-	}()
+
+		// Run in Goroutine
+		go func() {
+			defer processBtn.Enable()
+			err := ProcessProject(config)
+			if err != nil {
+				statusLabel.SetText("Error: " + err.Error())
+				dialog.ShowError(err, myWindow)
+			}
+			// Success message is handled inside ProcessProject via callback,
+			// but we can ensure the final state here if needed.
+		}()
+	}
+
+	// --- Main Layout Assembly ---
+
+	// GroupBox style using Cards
+	sourceCard := widget.NewCard("Input", "", sourceGroup)
+	outputCard := widget.NewCard("Output", "", outputGroup)
+	extCard := widget.NewCard("Configuration", "", extGroup)
+
+	content := container.NewVBox(
+		sourceCard,
+		outputCard,
+		extCard,
+		layout.NewSpacer(),
+		processBtn,
+		statusLabel,
+	)
+
+	// Add padding
+	paddedContent := container.NewPadded(content)
+
+	myWindow.SetContent(paddedContent)
+	myWindow.ShowAndRun()
 }
