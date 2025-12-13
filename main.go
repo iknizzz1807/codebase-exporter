@@ -10,103 +10,168 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
 
 func main() {
-	// Khởi tạo ứng dụng Fyne
-	fmt.Println("Đang khởi tạo ứng dụng...")
 	myApp := app.New()
-	myWindow := myApp.NewWindow("Codebase Exporter")
-	myWindow.Resize(fyne.NewSize(600, 400))
+	myWindow := myApp.NewWindow("Codebase Exporter Pro")
+	myWindow.Resize(fyne.NewSize(900, 700))
+
+	// State variables
+	var excludedDirs []string
+	var selectedFiles []string
 
 	// --- UI Components ---
 
-	// 1. Source Directory
-	sourceLabel := widget.NewLabel("Project Directory:")
+	// Source Directory
 	sourceEntry := widget.NewEntry()
 	sourceEntry.PlaceHolder = "Select project path..."
-
-	// 2r Output Directory
-	outputLabel := widget.NewLabel("Output Directory:")
-	outputEntry := widget.NewEntry()
-	outputEntry.PlaceHolder = "Select output path..."
-
-	// 3. Extensions
-	extLabel := widget.NewLabel("File Extensions (comma separated, empty for all):")
-	extEntry := widget.NewEntry()
-	extEntry.SetText("go,cpp,h,txt,ipynb,py,js,ts,html,css,java") // Default
-
-	// Status Label
-	statusLabel := widget.NewLabel("Ready.")
-	statusLabel.Wrapping = fyne.TextWrapWord
-
-	// --- Helper Functions for Buttons ---
-
-	// Hàm chọn thư mục
-	browseFunc := func(target *widget.Entry, title string) {
+	sourceBrowseBtn := widget.NewButton("Browse", func() {
 		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
 			if err != nil || uri == nil {
 				return
 			}
-			target.SetText(uri.Path())
+			sourceEntry.SetText(uri.Path())
 		}, myWindow)
-	}
+	})
 
-	// Hàm set đường dẫn nhanh (Desktop/Downloads/Documents)
-	setPathFunc := func(target *widget.Entry, folderName string) {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return
+	// Output Directory
+	outputEntry := widget.NewEntry()
+	outputEntry.PlaceHolder = "Select output path..."
+	outputBrowseBtn := widget.NewButton("Browse", func() {
+		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
+			if err != nil || uri == nil {
+				return
+			}
+			outputEntry.SetText(uri.Path())
+		}, myWindow)
+	})
+
+	// Quick path buttons
+	quickPathBtns := container.NewHBox(
+		widget.NewButton("Desktop", func() {
+			if home, err := os.UserHomeDir(); err == nil {
+				outputEntry.SetText(filepath.Join(home, "Desktop"))
+			}
+		}),
+		widget.NewButton("Downloads", func() {
+			if home, err := os.UserHomeDir(); err == nil {
+				outputEntry.SetText(filepath.Join(home, "Downloads"))
+			}
+		}),
+	)
+
+	// Extensions
+	extEntry := widget.NewEntry()
+	extEntry.SetText("go,cpp,h,txt,ipynb,py,js,ts,tsx,jsx,html,css,java,svelte,vue")
+	allFilesCheck := widget.NewCheck("Include all file types", nil)
+
+	// Export Mode
+	exportModeGroup := widget.NewRadioGroup([]string{
+		"Structure + Code (Default)",
+		"Structure Only",
+	}, nil)
+	exportModeGroup.SetSelected("Structure + Code (Default)")
+	exportModeGroup.Horizontal = false
+
+	// Scan Mode
+	scanModeGroup := widget.NewRadioGroup([]string{
+		"Scan all subdirectories",
+		"Select specific files only",
+	}, nil)
+	scanModeGroup.SetSelected("Scan all subdirectories")
+	scanModeGroup.Horizontal = false
+
+	// Code Output Mode
+	codeOutputGroup := widget.NewRadioGroup([]string{
+		"Full source code",
+		"AST summary (experimental)",
+	}, nil)
+	codeOutputGroup.SetSelected("Full source code")
+	codeOutputGroup.Horizontal = false
+
+	// Excluded directories list - KHAI BÁO TRƯỚC
+	var excludeList *widget.List
+	excludeList = widget.NewList(
+		func() int { return len(excludedDirs) },
+		func() fyne.CanvasObject {
+			return container.NewBorder(nil, nil, nil,
+				widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {}),
+				widget.NewLabel(""))
+		},
+		func(id widget.ListItemID, obj fyne.CanvasObject) {
+			c := obj.(*fyne.Container)
+			label := c.Objects[0].(*widget.Label)
+			btn := c.Objects[1].(*widget.Button)
+			label.SetText(excludedDirs[id])
+			btn.OnTapped = func() {
+				excludedDirs = append(excludedDirs[:id], excludedDirs[id+1:]...)
+				excludeList.Refresh()
+			}
+		},
+	)
+
+	excludeEntry := widget.NewEntry()
+	excludeEntry.PlaceHolder = "Directory name to exclude..."
+	addExcludeBtn := widget.NewButton("Add", func() {
+		dir := strings.TrimSpace(excludeEntry.Text)
+		if dir != "" {
+			excludedDirs = append(excludedDirs, dir)
+			excludeList.Refresh()
+			excludeEntry.SetText("")
 		}
-		target.SetText(filepath.Join(home, folderName))
-	}
+	})
 
-	// --- Layout Construction ---
-
-	// Source Group
-	sourceBrowseBtn := widget.NewButton("Browse...", func() { browseFunc(sourceEntry, "Select Project Directory") })
-	sourceQuickBtns := container.NewHBox(
-		widget.NewButton("Desktop", func() { setPathFunc(sourceEntry, "Desktop") }),
-		widget.NewButton("Downloads", func() { setPathFunc(sourceEntry, "Downloads") }),
-		widget.NewButton("Documents", func() { setPathFunc(sourceEntry, "Documents") }),
+	// Selected files list - KHAI BÁO TRƯỚC
+	var fileList *widget.List
+	fileList = widget.NewList(
+		func() int { return len(selectedFiles) },
+		func() fyne.CanvasObject {
+			return container.NewBorder(nil, nil, nil,
+				widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {}),
+				widget.NewLabel(""))
+		},
+		func(id widget.ListItemID, obj fyne.CanvasObject) {
+			c := obj.(*fyne.Container)
+			label := c.Objects[0].(*widget.Label)
+			btn := c.Objects[1].(*widget.Button)
+			label.SetText(filepath.Base(selectedFiles[id]))
+			btn.OnTapped = func() {
+				selectedFiles = append(selectedFiles[:id], selectedFiles[id+1:]...)
+				fileList.Refresh()
+			}
+		},
 	)
 
-	sourceGroup := container.NewVBox(
-		sourceLabel,
-		container.NewBorder(nil, nil, nil, sourceBrowseBtn, sourceEntry),
-		sourceQuickBtns,
-	)
+	selectFilesBtn := widget.NewButton("Select Files", func() {
+		dialog.ShowFileOpen(func(uc fyne.URIReadCloser, err error) {
+			if err != nil || uc == nil {
+				return
+			}
+			defer uc.Close()
+			selectedFiles = append(selectedFiles, uc.URI().Path())
+			fileList.Refresh()
+		}, myWindow)
+	})
+	clearFilesBtn := widget.NewButton("Clear All", func() {
+		selectedFiles = []string{}
+		fileList.Refresh()
+	})
 
-	// Output Group
-	outputBrowseBtn := widget.NewButton("Browse...", func() { browseFunc(outputEntry, "Select Output Directory") })
-	outputQuickBtns := container.NewHBox(
-		widget.NewButton("Desktop", func() { setPathFunc(outputEntry, "Desktop") }),
-		widget.NewButton("Downloads", func() { setPathFunc(outputEntry, "Downloads") }),
-		widget.NewButton("Documents", func() { setPathFunc(outputEntry, "Documents") }),
-	)
+	// Status
+	statusLabel := widget.NewLabel("Ready.")
+	statusLabel.Wrapping = fyne.TextWrapWord
+	progressBar := widget.NewProgressBarInfinite()
+	progressBar.Hide()
 
-	outputGroup := container.NewVBox(
-		outputLabel,
-		container.NewBorder(nil, nil, nil, outputBrowseBtn, outputEntry),
-		outputQuickBtns,
-	)
-
-	// Extension Group
-	extGroup := container.NewVBox(
-		extLabel,
-		extEntry,
-	)
-
-	// Process Button logic
-	processBtn := widget.NewButton("Process Directory", nil) // Set action below to capture vars
+	// Process button
+	processBtn := widget.NewButton("Export Codebase", nil)
 	processBtn.Importance = widget.HighImportance
-
 	processBtn.OnTapped = func() {
 		sourceDir := sourceEntry.Text
 		outputDir := outputEntry.Text
-		extStr := extEntry.Text
 
 		if sourceDir == "" {
 			dialog.ShowError(fmt.Errorf("please select a project directory"), myWindow)
@@ -117,69 +182,115 @@ func main() {
 			return
 		}
 
+		// Validate scan mode
+		if scanModeGroup.Selected == "Select specific files only" && len(selectedFiles) == 0 {
+			dialog.ShowError(fmt.Errorf("please select at least one file"), myWindow)
+			return
+		}
+
 		processBtn.Disable()
+		progressBar.Show()
 		statusLabel.SetText("Processing... Please wait.")
 
 		// Parse extensions
 		extensions := make(map[string]struct{})
-		allFiles := false
-		trimmedExtStr := strings.TrimSpace(extStr)
-		if trimmedExtStr == "" {
-			allFiles = true
-		} else {
-			parts := strings.Split(trimmedExtStr, ",")
+		allFiles := allFilesCheck.Checked
+		if !allFiles {
+			parts := strings.Split(extEntry.Text, ",")
 			for _, part := range parts {
 				ext := strings.TrimSpace(part)
-				ext = strings.TrimPrefix(ext, ".") // remove dot if user typed it
+				ext = strings.TrimPrefix(ext, ".")
 				if ext != "" {
 					extensions[ext] = struct{}{}
 				}
 			}
 		}
 
+		// Merge excluded dirs
+		customExcludeDirs := make(map[string]struct{})
+		for dir := range skipDirs {
+			customExcludeDirs[dir] = struct{}{}
+		}
+		for _, dir := range excludedDirs {
+			customExcludeDirs[dir] = struct{}{}
+		}
+
 		config := Config{
-			SourceDir:  sourceDir,
-			OutputDir:  outputDir,
-			Extensions: extensions,
-			AllFiles:   allFiles,
+			SourceDir:     sourceDir,
+			OutputDir:     outputDir,
+			Extensions:    extensions,
+			AllFiles:      allFiles,
+			ExcludedDirs:  customExcludeDirs,
+			StructureOnly: exportModeGroup.Selected == "Structure Only",
+			SpecificFiles: selectedFiles,
+			ScanAllDirs:   scanModeGroup.Selected == "Scan all subdirectories",
+			UseASTMode:    codeOutputGroup.Selected == "AST summary (experimental)",
 			UpdateStatus: func(msg string) {
-				// Fyne UI update must be thread-safe, usually handled auto but good practice
 				statusLabel.SetText(msg)
 			},
 		}
 
-		// Run in Goroutine
 		go func() {
-			defer processBtn.Enable()
+			defer func() {
+				processBtn.Enable()
+				progressBar.Hide()
+			}()
 			err := ProcessProject(config)
 			if err != nil {
 				statusLabel.SetText("Error: " + err.Error())
 				dialog.ShowError(err, myWindow)
 			}
-			// Success message is handled inside ProcessProject via callback,
-			// but we can ensure the final state here if needed.
 		}()
 	}
 
-	// --- Main Layout Assembly ---
+	// Layout
+	sourceCard := widget.NewCard("Source Directory", "", container.NewVBox(
+		container.NewBorder(nil, nil, nil, sourceBrowseBtn, sourceEntry),
+	))
 
-	// GroupBox style using Cards
-	sourceCard := widget.NewCard("Input", "", sourceGroup)
-	outputCard := widget.NewCard("Output", "", outputGroup)
-	extCard := widget.NewCard("Configuration", "", extGroup)
+	outputCard := widget.NewCard("Output Directory", "", container.NewVBox(
+		container.NewBorder(nil, nil, nil, outputBrowseBtn, outputEntry),
+		quickPathBtns,
+	))
 
-	content := container.NewVBox(
-		sourceCard,
-		outputCard,
-		extCard,
-		layout.NewSpacer(),
-		processBtn,
-		statusLabel,
+	configCard := widget.NewCard("Configuration", "", container.NewVBox(
+		widget.NewLabel("File Extensions (comma separated):"),
+		extEntry,
+		allFilesCheck,
+		widget.NewSeparator(),
+		widget.NewLabel("Export Mode:"),
+		exportModeGroup,
+		widget.NewSeparator(),
+		widget.NewLabel("Scan Mode:"),
+		scanModeGroup,
+		widget.NewSeparator(),
+		widget.NewLabel("Code Output Mode:"),
+		codeOutputGroup,
+	))
+
+	excludeCard := widget.NewCard("Excluded Directories", "Custom directories to skip", container.NewVBox(
+		container.NewBorder(nil, nil, nil, addExcludeBtn, excludeEntry),
+		container.NewScroll(excludeList),
+	))
+
+	filesCard := widget.NewCard("Specific Files", "Only used in 'Select specific files' mode", container.NewVBox(
+		container.NewHBox(selectFilesBtn, clearFilesBtn),
+		container.NewScroll(fileList),
+	))
+
+	leftColumn := container.NewVBox(sourceCard, outputCard, configCard)
+	rightColumn := container.NewVBox(excludeCard, filesCard)
+
+	mainContent := container.NewHSplit(leftColumn, rightColumn)
+	mainContent.SetOffset(0.5)
+
+	content := container.NewBorder(
+		nil,
+		container.NewVBox(widget.NewSeparator(), progressBar, statusLabel, processBtn),
+		nil, nil,
+		mainContent,
 	)
 
-	// Add padding
-	paddedContent := container.NewPadded(content)
-
-	myWindow.SetContent(paddedContent)
+	myWindow.SetContent(container.NewPadded(content))
 	myWindow.ShowAndRun()
 }

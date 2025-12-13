@@ -46,4 +46,5 @@ Công cụ này giúp bạn:
 
 ```bash
 go build -ldflags="-H windowsgui"
+go build -o codebase-exporter .
 ```
